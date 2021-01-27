@@ -11,11 +11,11 @@ from . import task
 from . import config
 
 
-def fix(context):
+def asr(context):
     """
-    Check configuration and fix the abnormal options
+    Validation the configurations and correction during Azure Site Recovery
     """
-    if context.check_conf:
+    if context.asr_check:
         candidate = check_sbd()
         if candidate != "":
             correct_sbd(context, candidate)

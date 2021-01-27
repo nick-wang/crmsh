@@ -90,7 +90,7 @@ class TestMain(TestCase):
     @mock.patch('preflight_check.main.fence_node')
     @mock.patch('preflight_check.main.kill_process')
     @mock.patch('preflight_check.main.check.check')
-    @mock.patch('preflight_check.main.check.fix')
+    @mock.patch('preflight_check.main.check.asr')
     @mock.patch('preflight_check.main.setup_logging')
     @mock.patch('os.makedirs')
     @mock.patch('os.path.exists')
@@ -98,7 +98,7 @@ class TestMain(TestCase):
     @mock.patch('preflight_check.main.parse_argument')
     @mock.patch('preflight_check.main.setup_basic_context')
     def test_run(self, mock_setup, mock_parse, mock_is_root, mock_exists, mock_mkdir,
-                 mock_setup_logging, mock_fix, mock_check, mock_kill, mock_fence, mock_sb):
+                 mock_setup_logging, mock_asr, mock_check, mock_kill, mock_fence, mock_sb):
         mock_is_root.return_value = True
         ctx = mock.Mock(var_dir="/var/lib/preflight_check")
         mock_exists.return_value = False
@@ -112,7 +112,7 @@ class TestMain(TestCase):
         mock_mkdir.assert_called_once_with(ctx.var_dir, exist_ok=True)
         mock_setup_logging.assert_called_once_with(ctx)
         mock_check.assert_called_once_with(ctx)
-        mock_fix.assert_called_once_with(ctx)
+        mock_asr.assert_called_once_with(ctx)
         mock_kill.assert_called_once_with(ctx)
         mock_fence.assert_called_once_with(ctx)
         mock_sb.assert_called_once_with(ctx)
@@ -120,14 +120,14 @@ class TestMain(TestCase):
     @mock.patch('sys.exit')
     @mock.patch('preflight_check.utils.json_dumps')
     @mock.patch('preflight_check.main.check.check')
-    @mock.patch('preflight_check.main.check.fix')
+    @mock.patch('preflight_check.main.check.asr')
     @mock.patch('preflight_check.main.setup_logging')
     @mock.patch('os.path.exists')
     @mock.patch('preflight_check.utils.is_root')
     @mock.patch('preflight_check.main.parse_argument')
     @mock.patch('preflight_check.main.setup_basic_context')
     def test_run_except(self, mock_setup, mock_parse, mock_is_root, mock_exists,
-                        mock_setup_logging, mock_fix, mock_check, mock_dumps, mock_exit):
+                        mock_setup_logging, mock_asr, mock_check, mock_dumps, mock_exit):
         mock_is_root.return_value = True
         ctx = mock.Mock(var_dir="/var/lib/preflight_check")
         mock_exists.return_value = True
@@ -143,7 +143,7 @@ class TestMain(TestCase):
         mock_exists.assert_called_once_with(ctx.var_dir)
         mock_setup_logging.assert_called_once_with(ctx)
         mock_check.assert_called_once_with(ctx)
-        mock_fix.assert_called_once_with(ctx)
+        mock_asr.assert_called_once_with(ctx)
         mock_dumps.assert_called_once_with()
         mock_exit.assert_called_once_with(1)
 

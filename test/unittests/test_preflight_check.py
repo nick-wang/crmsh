@@ -482,31 +482,31 @@ Active Resources:
             mock.call("Stopped resources: r3,r4")
             ])
 
-    # Test fix()
+    # Test asr()
     @classmethod
     @mock.patch('preflight_check.check.correct_sbd')
     @mock.patch('preflight_check.check.check_sbd')
-    def test_fix_no_candidate(cls, mock_check_sbd, mock_correct_sbd):
+    def test_asr_has_sbd_candidate(cls, mock_check_sbd, mock_correct_sbd):
         """
-        Test fix() has no valid candidate
+        Test asr() has valid candidate
         """
         dev = "/dev/disk/by-id/scsi-SATA_ST2000LM007-1R81_WDZ5J42A"
-        ctx = mock.Mock(fix_conf=True)
+        ctx = mock.Mock(asr_check=True)
         mock_check_sbd.return_value = dev
-        check.fix(ctx)
+        check.asr(ctx)
         mock_correct_sbd.assert_called_once_with(ctx, dev)
 
     @classmethod
     @mock.patch('preflight_check.check.correct_sbd')
     @mock.patch('preflight_check.check.check_sbd')
-    def test_fix_has_candidate(cls, mock_check_sbd, mock_correct_sbd):
+    def test_asr_no_sbd_candidate(cls, mock_check_sbd, mock_correct_sbd):
         """
-        Test fix() has valid candidate
+        Test asr() no valid candidate
         """
-        ctx = mock.Mock(fix_conf=True)
+        ctx = mock.Mock(asr_check=True)
         mock_check_sbd.return_value = ""
         mock_correct_sbd.return_value = ""
-        check.fix(ctx)
+        check.asr(ctx)
         mock_correct_sbd.assert_not_called()
 
     # Test check_sbd()
