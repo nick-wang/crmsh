@@ -2381,6 +2381,15 @@ class InterfacesInfo(object):
         return cls_inst.ip_list
 
     @classmethod
+    def get_local_interface_list(cls, is_ipv6):
+        """
+        Get interface list
+        """
+        cls_inst = cls(is_ipv6)
+        cls_inst.get_interfaces_info()
+        return cls_inst.interface_list
+
+    @classmethod
     def ip_in_local(cls, addr):
         """
         Check whether given address was in one of local address

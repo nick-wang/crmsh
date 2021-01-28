@@ -3,9 +3,11 @@ import re
 import glob
 import json
 import logging
+import socket
 from datetime import datetime
 from contextlib import contextmanager
 from crmsh import utils as crmshutils
+from crmsh import xmlutil, corosync
 from . import config
 
 
@@ -184,6 +186,53 @@ def this_node():
     return stdout
 
 
+def _query_internet_server(hname):
+    """
+    Non-interactively query Internet domain name servers
+    hname: Hostname of the server, can't use IP address
+    """
+    # nslookup will put err msg into stdout
+    rc, stdout, _ = crmshutils.get_stdout_stderr("nslookup {}".format(hname))
+    if rc != 0:
+        msg_error(stdout)
+        return None
+
+    flag = False
+    for line in stdout.split("\n"):
+        tmp = re.match(r'Name:\s+.*{}\.+.*'.format(hname), line)
+        if tmp:
+            flag = True
+            continue
+
+        # Check the next line after matched hostname
+        if flag:
+            tmp = re.match(r'Address:\s+(.*)', line)
+
+            if tmp:
+                ip = tmp.groups()[0].split("#")[0].strip()
+                return ip
+
+        flag = False
+
+    return None
+
+
+def _get_bind_addr_with_local_network(ipaddr):
+    """
+    Find corresponding bind address based on local network
+    """
+    is_ipv6 = crmshutils.IP.is_ipv6(ipaddr)
+    interface_list = crmshutils.InterfacesInfo.get_local_interface_list(is_ipv6)
+
+    bind_addr = None
+    for interface in interface_list:
+        if interface.ip_in_network(ipaddr):
+            bind_addr = interface.network
+            break
+
+    return bind_addr
+
+
 def str_to_datetime(str_time, fmt):
     return datetime.strptime(str_time, fmt)
 
@@ -299,3 +348,207 @@ def find_candidate_sbd(dev):
         i += 1
 
     return candidates[index]
+
+
+class Node(object):
+    """
+    Class to describe (cluster) node
+    """
+
+    def __init__(self, name):
+        self.name = name
+        self._nodeid = None
+        self._old_IP = None
+        self._cur_IP = None
+        self._bind_addr = None
+
+    @property
+    def nodeid(self):
+        """
+        Get nodeid
+        """
+        return self._nodeid
+
+    @nodeid.setter
+    def nodeid(self, nodeid):
+        """
+        Set nodeid
+        """
+        self._nodeid = nodeid
+
+    @property
+    def old_IP(self):
+        """
+        Get original IP list
+        """
+        return self._old_IP
+
+    @old_IP.setter
+    def old_IP(self, ip_list):
+        """
+        Set original IP list
+        """
+        self._old_IP = ip_list
+
+    @property
+    def cur_IP(self):
+        """
+        Get current IP list
+        """
+        return self._cur_IP
+
+    @cur_IP.setter
+    def cur_IP(self, ip_list):
+        """
+        Set current IP list
+        """
+        self._cur_IP = ip_list
+
+    @property
+    def bind_addr(self):
+        """
+        Get bind address
+        """
+        return self._bind_addr
+
+    @bind_addr.setter
+    def bind_addr(self, bindaddr):
+        """
+        Set bind address
+        """
+        self._bind_addr = bindaddr
+
+    @property
+    def need_repair(self):
+        """
+        Check if the IP value need repair
+        """
+        # Make sure old_IP no longer in current interface network
+        if (self._cur_IP and self._old_IP and self._cur_IP != self._old_IP
+                and not _get_bind_addr_with_local_network(self._old_IP)):
+            return True
+
+        return False
+
+
+class ClusterInfo(object):
+    """
+    Class to get old cluster information.
+    eg. corosync.conf, cib.xml, etc...
+    """
+
+    def __init__(self):
+        self.hostname = socket.gethostname()
+        # hostip maybe unreal if /etc/hosts configured with a stale one
+        self.hostip = socket.gethostbyname(self.hostname)
+        self.cib_path = os.getenv('CIB_file',
+                                  config.CIB_FILE)
+        self.coro_conf = os.getenv('COROSYNC_MAIN_CONFIG_FILE',
+                                   config.COROSYNC_CONF)
+        self._nodes = self._init_cluster_nodes
+
+    @property
+    def _init_cluster_nodes(self):
+        """
+        Get cluster nodes (including remote) from cib.xml
+        Not yet has old IP
+        """
+        nodes = []
+        if not os.path.isfile(self.cib_path):
+            return []
+
+        cib_elem = xmlutil.file2cib_elem(self.cib_path)
+
+        name_id_tuple = [(x.get("uname"), x.get("id", None))
+                         for x in cib_elem.xpath("/cib/configuration/nodes/node")]
+
+        for name, nid in name_id_tuple:
+            tmp = Node(name)
+            tmp.nodeid = nid
+            nodes.append(tmp)
+
+        return nodes
+
+    @property
+    def was_cluster(self):
+        """
+        Check whether this node belong to a cluster
+        """
+        if not os.path.isfile(self.cib_path) or not os.path.isfile(
+                self.coro_conf) or not self._nodes or not self.corosync_nodes:
+            return False
+
+        return True
+
+    @property
+    def is_unicast(self):
+        """
+        Check the cluster use unicast transport
+        """
+        return corosync.is_unicast()
+
+    @property
+    def is_autoid(self):
+        """
+        Check the cluster use auto node ID
+        """
+        length = len(corosync.get_values("nodelist.node.nodeid"))
+        if not length:
+            return True
+
+        return length != len(self.corosync_nodes)
+
+    @property
+    def is_dual_ring(self):
+        """
+        Check the cluster use multiple ring
+        """
+        return len(corosync.get_values("nodelist.node.ring1_addr")) != 0
+
+    @property
+    def corosync_nodes(self):
+        """
+        Get the cluster node IP. Only ring0.
+        """
+        return crmshutils.list_corosync_nodes()
+
+    @property
+    def get_cluster_nodes(self):
+        """
+        Fill in nodes with corresponding old IP(corosync.conf) and new IP(nslookup)
+        """
+        length = len(self.corosync_nodes)
+        if length != len(self._nodes):
+            return []
+
+        # Fill in old IP
+        if self.is_autoid:
+            # Impossible to match without a nodeid configured in corosync.conf
+            # Random match old IP to node
+            for i in range(length):
+                self._nodes[i].old_IP = self.corosync_nodes[i]
+        else:
+            coro_nodes_ids = corosync.get_values("nodelist.node.nodeid")
+            coro_nodes_ips = self.corosync_nodes
+
+            for n in self._nodes:
+                for i in range(length):
+                    if coro_nodes_ids[i] == n.nodeid:
+                        n.old_IP = coro_nodes_ips[i]
+                        break
+                    # TODO: else: Exception when no nodeid matched
+
+        # Fill in current IP of peer node
+        for n in self._nodes:
+            ip = _query_internet_server(n.name)
+
+            if ip:
+                n.cur_IP = ip
+
+        # Set bind address based on the current IP
+        # All nodes should have same bind address based on cur_IP
+        # so maybe don't need to run _get_bind_addr_with_local_network on all nodes
+        for n in self._nodes:
+            n.bind_addr = _get_bind_addr_with_local_network(n.cur_IP)
+
+        return self._nodes
