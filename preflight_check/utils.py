@@ -192,7 +192,8 @@ def _query_internet_server(hname):
     hname: Hostname of the server, can't use IP address
     """
     # nslookup will put err msg into stdout
-    rc, stdout, _ = crmshutils.get_stdout_stderr("nslookup {}".format(hname))
+    #rc, stdout, _ = crmshutils.get_stdout_stderr("nslookup {}".format(hname))
+    rc, stdout, _ = crmshutils.get_stdout_stderr("/tmp/nick-test/1.sh {}".format(hname))
     if rc != 0:
         msg_error(stdout)
         return None
@@ -437,15 +438,31 @@ class ClusterInfo(object):
     eg. corosync.conf, cib.xml, etc...
     """
 
-    def __init__(self):
+    def __init__(self, cib=config.CIB_FILE, coro=config.COROSYNC_CONF):
         self.hostname = socket.gethostname()
         # hostip maybe unreal if /etc/hosts configured with a stale one
         self.hostip = socket.gethostbyname(self.hostname)
         self.cib_path = os.getenv('CIB_file',
-                                  config.CIB_FILE)
+                                  cib)
         self.coro_conf = os.getenv('COROSYNC_MAIN_CONFIG_FILE',
-                                   config.COROSYNC_CONF)
+                                   coro)
         self._nodes = self._init_cluster_nodes
+
+    def test(self):
+        print("===Start self.test===")
+        print(self.hostname)
+        print(self.hostip)
+        print(self.cib_path)
+        print(self.coro_conf)
+
+        for i in self.get_cluster_nodes:
+            print(i.name)
+            print(i.nodeid)
+            print(i.old_IP)
+            print(i.cur_IP)
+            print(i.bind_addr)
+            print(i.need_repair)
+        print("===Done self.test===")
 
     @property
     def _init_cluster_nodes(self):

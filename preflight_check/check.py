@@ -11,11 +11,53 @@ from . import task
 from . import config
 
 
+def nick_test():
+    from pprint import pprint
+    test_cluster_info = utils.ClusterInfo(cib="/tmp/nick-test/cib.xml",
+                                          coro="/etc/corosync/corosync.conf")
+
+    print("=======Nick Test Start======")
+    print("\ntest_cluster_info.test:")
+    test_cluster_info.test()
+
+    print("\ntest_cluster_info.was_cluster:")
+    pprint(test_cluster_info.was_cluster)
+
+    print("\ntest_cluster_info.is_unicast:")
+    pprint(test_cluster_info.is_unicast)
+
+    print("\ntest_cluster_info.is_autoid:")
+    pprint(test_cluster_info.is_autoid)
+
+    print("\ntest_cluster_info.is_dual_ring:")
+    pprint(test_cluster_info.is_dual_ring)
+
+    print("\ntest_cluster_info.corosync_nodes:")
+    pprint(test_cluster_info.corosync_nodes)
+
+    print("\ntest_cluster_info.get_cluster_nodes:")
+    pprint(test_cluster_info.get_cluster_nodes)
+    tmp = test_cluster_info.get_cluster_nodes
+    for n in tmp:
+        print(n.name)
+        print(n.nodeid)
+        print(n.old_IP)
+        print(n.cur_IP)
+        print(n.bind_addr)
+        print(n.need_repair)
+
+    print("=======Nick Test Stop ======")
+
+
 def asr(context):
     """
     Validation the configurations and correction during Azure Site Recovery
     """
     if context.asr_check:
+        # FIXME:
+        nick_test()
+        return
+
         candidate = check_sbd()
         if candidate != "":
             correct_sbd(context, candidate)
